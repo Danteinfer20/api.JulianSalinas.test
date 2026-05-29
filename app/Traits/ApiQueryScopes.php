@@ -6,31 +6,36 @@ use Illuminate\Database\Eloquent\Builder;
 
 trait ApiQueryScopes
 {
-   
-     
     public function scopeIncluded(Builder $query)
     {
         if (empty($this->allowIncluded) || empty(request('included'))) {
             return;
         }
+
         $relations = explode(',', request('included'));
         $allowIncluded = collect($this->allowIncluded);
         
         foreach ($relations as $key => $relationship) {
-            if (!$allowIncluded->contains($relationship)) {
-                unset($relations[$key]); // Destrucción matemática por seguridad
+            // Soporta la verificación de la relación base si viene con perforación de punto (.)
+            $baseRelation = explode('.', $relationship)[0];
+
+            if (!$allowIncluded->contains($relationship) && !$allowIncluded->contains($baseRelation)) {
+                unset($relations[$key]);
             }
         }
-        $query->with($relations);
+
+        if (!empty($relations)) {
+            $query->with($relations);
+        }
     }
 
-  
-     
     public function scopeWithCount(Builder $query)
     {
+        // Validación unificada sobre allowIncluded para máxima compatibilidad
         if (empty($this->allowIncluded) || empty(request('withCount'))) {
             return;
         }
+
         $relations = explode(',', request('withCount'));
         $allowIncluded = collect($this->allowIncluded);
         
@@ -39,21 +44,24 @@ trait ApiQueryScopes
                 unset($relations[$key]);
             }
         }
-        $query->withCount($relations);
-    }
 
-   
+        // CONTROL DE FILTRO CRÍTICO: Solo ejecuta si el array filtrado mantiene elementos válidos
+        if (!empty($relations)) {
+            $query->withCount($relations);
+        }
+    }
      
     public function scopeFilter(Builder $query)
     {
         if (empty($this->allowFilter) || empty(request('filter'))) {
             return;
         }
+
         $filters = request('filter');
         $allowFilter = collect($this->allowFilter);
         
         foreach ($filters as $filter => $value) {
-            if ($allowFilter->contains($filter)) {
+            if ($allowFilter->contains($filter) && !is_null($value)) {
                 $query->where($filter, 'LIKE', '%' . $value . '%');
             }
         }
@@ -61,25 +69,26 @@ trait ApiQueryScopes
 
     public function scopeFilterStrict(Builder $query)
     {
-        if (empty($this->allowFilterStrict) || empty(request('filterStrict'))) {
+        if (empty($this->allowFilter) || empty(request('filterStrict'))) {
             return;
         }
+
         $filters = request('filterStrict');
-        $allowFilterStrict = collect($this->allowFilterStrict);
+        $allowFilter = collect($this->allowFilter);
         
         foreach ($filters as $filter => $value) {
-            if ($allowFilterStrict->contains($filter)) {
+            if ($allowFilter->contains($filter) && !is_null($value)) {
                 $query->where($filter, '=', $value);
             }
         }
     }
-
     
     public function scopeFilterDate(Builder $query)
     {
         if (empty($this->allowFilterDate) || empty(request('filterDate'))) {
             return;
         }
+
         $filters = request('filterDate');
         $allowFilterDate = collect($this->allowFilterDate);
         
@@ -92,13 +101,13 @@ trait ApiQueryScopes
             }
         }
     }
-
    
     public function scopeSearch(Builder $query)
     {
         if (empty($this->allowSearch) || empty(request('search'))) {
             return;
         }
+
         $term = request('search');
         $allowSearch = $this->allowSearch;
 
@@ -108,13 +117,13 @@ trait ApiQueryScopes
             }
         });
     }
-
     
     public function scopeSort(Builder $query)
     {
         if (empty($this->allowSort) || empty(request('sort'))) {
             return;
         }
+
         $sortFields = explode(',', request('sort'));
         $allowSort = collect($this->allowSort);
         
@@ -129,7 +138,6 @@ trait ApiQueryScopes
             }
         }
     }
-
     
     public function scopeGetOrPaginate(Builder $query)
     {
